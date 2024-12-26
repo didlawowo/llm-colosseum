@@ -5,7 +5,7 @@ import traceback
 from threading import Thread
 from typing import List, Optional
 
-from agent import KEN_GREEN, KEN_RED, Robot
+from agent import KEN_GREEN, KEN_RED, TextRobot, VisionRobot
 from agent.config import MODELS
 from diambra.arena import (
     EnvironmentSettingsMultiAgent,
@@ -14,6 +14,8 @@ from diambra.arena import (
     make,
 )
 from rich import print
+
+from agent.robot import Robot
 
 
 def generate_random_model(openai: bool = False, mistral: bool = True):
@@ -36,7 +38,7 @@ class Player:
     nickname: str
     model: str
     robot: Optional[Robot] = None
-    temperature: Optional[float] = 0.0
+    temperature: float = 0.7
 
     def verify_provider_name(self):
         if self.model.startswith("openai"):
@@ -47,6 +49,10 @@ class Player:
             assert (
                 os.environ.get("MISTRAL_API_KEY") is not None
             ), "Mistral API key not set"
+        if self.model.startswith("cerebras"):
+            assert (
+                os.environ.get("CEREBRAS_API_KEY") is not None
+            ), "Cerebras API key not set"
 
 
 class Player1(Player):
@@ -54,19 +60,40 @@ class Player1(Player):
         self,
         nickname: str,
         model: str,
+        robot_type: str = "text",
+        temperature: float = 0.7,
     ):
         self.nickname = nickname
         self.model = model
-        self.robot = Robot(
-            action_space=None,
-            character="Ken",
-            side=0,
-            character_color=KEN_RED,
-            ennemy_color=KEN_GREEN,
-            only_punch=os.getenv("TEST_MODE", False),
-            model=self.model,
-            player_nb=1,
-        )
+        self.robot_type = robot_type
+        self.temperature = temperature
+
+        if robot_type == "vision":
+            self.robot = VisionRobot(
+                action_space=None,
+                character="Ken",
+                side=0,
+                character_color=KEN_RED,
+                model=self.model,
+                ennemy_color=KEN_GREEN,
+                only_punch=os.getenv("TEST_MODE", False),
+                temperature=self.temperature,
+                sleepy=False,
+                player_nb=1,
+            )
+        else:
+            self.robot = TextRobot(
+                action_space=None,
+                character="Ken",
+                side=0,
+                character_color=KEN_RED,
+                ennemy_color=KEN_GREEN,
+                only_punch=os.getenv("TEST_MODE", False),
+                temperature=self.temperature,
+                sleepy=False,
+                model=self.model,
+                player_nb=1,
+            )
         print(f"[red] Player 1 using: {self.model}")
         self.verify_provider_name()
 
@@ -76,19 +103,37 @@ class Player2(Player):
         self,
         nickname: str,
         model: str,
+        robot_type: str = "text",
+        temperature: float = 0.7,
     ):
         self.nickname = nickname
         self.model = model
-        self.robot = Robot(
-            action_space=None,
-            character="Ken",
-            side=1,
-            character_color=KEN_GREEN,
-            ennemy_color=KEN_RED,
-            sleepy=os.getenv("TEST_MODE", False),
-            model=self.model,
-            player_nb=2,
-        )
+        self.robot_type = robot_type
+        self.temperature = temperature
+        if robot_type == "vision":
+            self.robot = VisionRobot(
+                action_space=None,
+                character="Ken",
+                side=1,
+                model=self.model,
+                character_color=KEN_GREEN,
+                ennemy_color=KEN_RED,
+                temperature=self.temperature,
+                sleepy=os.getenv("TEST_MODE", False),
+                player_nb=2,
+            )
+        else:
+            self.robot = TextRobot(
+                action_space=None,
+                character="Ken",
+                side=1,
+                character_color=KEN_GREEN,
+                ennemy_color=KEN_RED,
+                temperature=self.temperature,
+                sleepy=os.getenv("TEST_MODE", False),
+                model=self.model,
+                player_nb=2,
+            )
         print(f"[green] Player 2 using: {self.model}")
         self.verify_provider_name()
 
@@ -115,13 +160,13 @@ class Episode:
         if not os.path.exists("results.csv"):
             with open("results.csv", "w") as f:
                 f.write(
-                    "id,player_1_model,player_1_temperature,player_2_model,player_2_temperature,player_1_won\n"
+                    "id,player_1_model,player_1_robot_type, player_1_temperature, player_2_model,player_2_robot_type,player_2_temperature, player_1_won\n"
                 )
 
         with open("results.csv", "a") as f:
             f.write(
-                f"{timestamp},{self.player_1.model},{self.player_1.temperature},"
-                + f"{self.player_2.model},{self.player_2.temperature},{self.player_1_won}\n"
+                f"{timestamp},{self.player_1.model},{self.player_1.robot_type},{self.player_1.temperature},"
+                + f"{self.player_2.model},{self.player_2.robot_type},{self.player_2.temperature},{self.player_1_won}\n"
             )
 
 
@@ -333,7 +378,8 @@ class Game:
                         )
                     episode.save()
                     self.env.close()
-                    break
+                    ##TODO: Replace the line bellow by pass
+                    return episode.player_1_won
         except Exception as e:
             # self.env.close()
             print(f"Exception: {e}")

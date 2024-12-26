@@ -9,3 +9,7 @@ results.csv
 results/
 
 .DS_Store
+env
+
+adle_notebook.ipynb
+elo_rankings.ipynb
